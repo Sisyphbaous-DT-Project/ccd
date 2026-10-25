@@ -2,7 +2,7 @@
 
 <h1 align="center">ccd</h1>
 
-<p align="center">Summarized thinking for <a href="https://github.com/QuantumNous/new-api">new-api</a>: users see short working notes, the raw chain of thought stays on your server.</p>
+<p align="center">Chains of thought too long to read? ccd summarizes them into a few short working notes, the way Claude does.<br>Built for <a href="https://github.com/QuantumNous/new-api">new-api</a>; the model's own thinking is left untouched.</p>
 
 <p align="center"><a href="README.md">中文</a> | English</p>
 
@@ -10,9 +10,11 @@
 
 ## What it is
 
-ccd is a small service that sits in front of new-api. It follows the idea behind Anthropic's [summarized thinking](https://platform.claude.com/docs/en/build-with-claude/thinking):
+Reasoning models often think for thousands of words: re-checking, backtracking, going in circles. Streamed to users as-is, it is too much to follow and buries what matters. Claude handles this with [summarized thinking](https://platform.claude.com/docs/en/build-with-claude/thinking): instead of the raw chain of thought, users see a concise summary written by a separate model.
 
-- The model thinks as usual. ccd hands the raw reasoning, segment by segment, to another model that rewrites it as first-person working notes of one or two sentences, streamed to the user as they are written.
+ccd brings the same approach to new-api. It is a small service that sits in front of new-api:
+
+- The model thinks as usual; reasoning effort and thinking budgets are passed through unchanged. ccd hands the raw reasoning, segment by segment, to another model that rewrites it as first-person working notes of one or two sentences, streamed to the user as they are written.
 - **The raw chain of thought never reaches the client.** It is kept on the server; when the client sends the notes back in the next turn, ccd swaps the original back in before forwarding upstream, so across turns and tool calls the model always sees its own original reasoning.
 - Rules are configured inside new-api's admin UI: per group, per model, or for one specific key. Notes can be written in Chinese, English, or any language you type in.
 

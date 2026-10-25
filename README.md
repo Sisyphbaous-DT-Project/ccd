@@ -2,7 +2,7 @@
 
 <h1 align="center">ccd</h1>
 
-<p align="center">给 <a href="https://github.com/QuantumNous/new-api">new-api</a> 的模型套上「思维链转述」：用户看到的是简短的工作笔记，原始思维链留在服务器上。</p>
+<p align="center">模型的思维链太长、太啰嗦？ccd 像 Claude 那样把它转述成几句简短的工作笔记再展示给用户。<br>给 <a href="https://github.com/QuantumNous/new-api">new-api</a> 用，模型本身的思考一点不受影响。</p>
 
 <p align="center">中文 | <a href="README.en.md">English</a></p>
 
@@ -10,9 +10,11 @@
 
 ## 这是什么
 
-ccd 是一个放在 new-api 前面的小服务，做法参照 Anthropic 的 [summarized thinking](https://platform.claude.com/docs/en/build-with-claude/thinking)：
+推理模型的思维链动辄几千上万字：反复验算、来回推翻、绕圈子。原样流式展示给用户，既看不过来，也抓不住重点。Claude 的做法是 [summarized thinking](https://platform.claude.com/docs/en/build-with-claude/thinking)：不直接展示原始思维链，而是由另一个模型把它转述成简短的摘要。
 
-- 模型照常思考。ccd 把原始思维链一段一段交给另一个模型，写成第一人称、一两句话的「工作笔记」，边写边流式展示给用户。
+ccd 把同样的做法带到了 new-api 上。它是一个放在 new-api 前面的小服务：
+
+- 模型照常思考，推理强度、思考预算原样透传。ccd 把原始思维链一段一段交给另一个模型，转述成第一人称、一两句话的「工作笔记」，边写边流式展示给用户。
 - **原始思维链不发给客户端**，存在服务器上。客户端下一轮把笔记带回来时，ccd 原样换回原版再交给上游——模型在多轮对话、工具调用里看到的始终是自己的原始思维链。
 - 规则在 new-api 后台配置：可以按分组、按模型，或者直接选某一个 key；转述语言可选中文、English 或任意自定义语言。
 
