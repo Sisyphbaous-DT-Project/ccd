@@ -1,0 +1,24 @@
+[Unit]
+Description=ccd - thinking-chain summaries for new-api
+After=network.target
+
+[Service]
+Type=simple
+# 用 SQLite 时，ccd 要能写 new-api 数据目录里的 -shm 文件（只读查询也需要）：
+# 请用和 new-api 相同的系统用户运行（这里示例用 root）。
+User=root
+Environment=CCD_LISTEN=127.0.0.1:3140
+Environment=CCD_NEWAPI=http://127.0.0.1:3000
+Environment=CCD_SQLITE_PATH=/opt/new-api/data/one-api.db
+# 用 MySQL / PostgreSQL 时改用 CCD_SQL_DSN，写法与 new-api 的 SQL_DSN 相同：
+# Environment="CCD_SQL_DSN=root:123456@tcp(127.0.0.1:3306)/new-api"
+# Environment="CCD_SQL_DSN=postgresql://root:123456@127.0.0.1:5432/new-api"
+Environment=CCD_STATE=/var/lib/ccd
+StateDirectory=ccd
+ExecStart=/usr/local/bin/ccd
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

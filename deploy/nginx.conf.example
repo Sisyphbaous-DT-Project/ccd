@@ -1,0 +1,52 @@
+# ccd 的 nginx 接入示例。假设 new-api 在 127.0.0.1:3000，ccd 在 127.0.0.1:3140。
+
+# 模型请求先过 ccd；ccd 连不上时自动回落 new-api（只在连接失败时回落，已经发出去的请求不会重发）。
+upstream ccd_backend {
+    server 127.0.0.1:3140 max_fails=1 fail_timeout=2s;
+    server 127.0.0.1:3000 backup;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name api.example.com;
+
+    # 1. 模型请求：先过 ccd
+    location ~ ^/(v1/|v1beta/) {
+        proxy_pass http://ccd_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header Accept-Encoding "";
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_next_upstream error timeout;
+        proxy_next_upstream_tries 2;
+    }
+
+    # 2. ccd 的管理接口和面板脚本（管理接口由 ccd 自己校验 new-api 管理员身份）
+    location /ccd/ {
+        proxy_pass http://127.0.0.1:3140;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    # 3. 其余请求照常给 new-api，并把面板脚本注入页面
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Accept-Encoding "";  # sub_filter 需要未压缩的页面
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        sub_filter_once on;
+        sub_filter '</body>' '<script src="/ccd/panel.js"></script></body>';
+    }
+}

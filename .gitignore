@@ -1,0 +1,6 @@
+/ccd
+/ccd.exe
+/dist/
+*.db
+*.db-shm
+*.db-wal

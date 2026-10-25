@@ -1,0 +1,53 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ccdtest
+          MYSQL_DATABASE: ccdtest
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pccdtest"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ccdtest
+          POSTGRES_DB: ccdtest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      CCD_TEST_MYSQL_DSN: root:ccdtest@tcp(127.0.0.1:3306)/ccdtest
+      CCD_TEST_PG_DSN: postgresql://postgres:ccdtest@127.0.0.1:5432/ccdtest?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - name: vet
+        run: go vet ./...
+      - name: test
+        run: go test -race -count=1 ./...
+      - name: new-api database queries on MySQL and PostgreSQL
+        run: go test -count=1 -v -run TestNewAPIDirectoryOnRealDatabases .
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build image
+        run: docker build -t ccd:ci .

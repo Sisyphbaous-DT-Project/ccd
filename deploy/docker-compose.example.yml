@@ -1,0 +1,26 @@
+# 示例：new-api 与 ccd 一起跑（SQLite）。ccd 与 new-api 共用 ./data 数据卷，只读查询 new-api 的数据库。
+# 对外请再套一层反向代理（见 nginx.conf.example）：模型请求转给 ccd，其余转给 new-api，并注入面板脚本。
+services:
+  new-api:
+    image: calciumion/new-api:latest
+    restart: always
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  ccd:
+    build: ..
+    restart: always
+    depends_on:
+      - new-api
+    environment:
+      CCD_NEWAPI: http://new-api:3000
+      CCD_SQLITE_PATH: /data/one-api.db
+      # 用 MySQL / PostgreSQL 时改用 CCD_SQL_DSN，写法与 new-api 的 SQL_DSN 相同：
+      # CCD_SQL_DSN: root:123456@tcp(mysql:3306)/new-api
+    volumes:
+      - ./data:/data
+      - ./ccd-data:/var/lib/ccd
+    ports:
+      - "127.0.0.1:3140:3140"
