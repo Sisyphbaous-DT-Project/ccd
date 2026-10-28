@@ -3,6 +3,7 @@ package main
 // 规则配置：哪个分组 / 哪些模型（或某一个令牌）要转述、用哪个模型转述、转述成什么语言，以及高级参数。
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -132,6 +133,45 @@ func (a *advanced) contentWait() time.Duration {
 	return time.Duration(a.ContentWaitSec) * time.Second
 }
 
+// normalizeExtra 把「关思考参数」规整成紧凑的 JSON 对象字节。
+//
+// 面板里的输入框是一段文本，提交上来时 extra 是 JSON 字符串（"{\"a\":1}"），
+// 直接调接口的人给的是对象本身；两种都收，统一存成对象字节。
+// 以前只认对象，面板填对了也报「必须是 JSON 对象」，整条规则连带存不进去。
+func (a *advanced) normalizeExtra() error {
+	bad := errors.New("高级设置里的关思考参数必须是 JSON 对象")
+	raw := bytes.TrimSpace(a.Extra)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		a.Extra = nil
+		return nil
+	}
+	if raw[0] == '"' { // 面板发来的字符串：先解成文本，再按 JSON 解析一次
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			return bad
+		}
+		raw = bytes.TrimSpace([]byte(s))
+		if len(raw) == 0 {
+			a.Extra = nil
+			return nil
+		}
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return bad
+	}
+	if len(m) == 0 {
+		a.Extra = nil
+		return nil
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return bad
+	}
+	a.Extra = b
+	return nil
+}
+
 // extraFields 解析「关思考参数」。默认同时给 reasoning_effort=off 和 thinking.type=disabled：
 // 不同上游只认其中一种写法，只认后者的上游如果只收到 off，会先偷偷思考吃掉 max_tokens，摘要写到一半就被截断。
 func (a *advanced) extraFields() map[string]any {
@@ -177,11 +217,8 @@ func (r *rule) validateTranslator() error {
 	}
 	if r.Advanced != nil {
 		r.Advanced.clamp()
-		if len(r.Advanced.Extra) > 0 {
-			var m map[string]any
-			if json.Unmarshal(r.Advanced.Extra, &m) != nil {
-				return errors.New("高级设置里的关思考参数必须是 JSON 对象")
-			}
+		if err := r.Advanced.normalizeExtra(); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -240,6 +277,13 @@ func (c *config) normalize() {
 		if err := r.validate(); err != nil {
 			// 坏数据只影响这一条：关掉它，别让整份配置起不来。
 			r.Enabled = false
+		}
+		// 停用中的规则存半成品时校验会提前返回，关思考参数可能还是面板发来的字符串；
+		// 这里统一收成对象，免得落盘的格式随「有没有填完」变来变去。
+		if r.Advanced != nil {
+			if err := r.Advanced.normalizeExtra(); err != nil {
+				r.Advanced.Extra = nil // 真填坏了就退回默认，别把坏值留在盘上
+			}
 		}
 	}
 }
