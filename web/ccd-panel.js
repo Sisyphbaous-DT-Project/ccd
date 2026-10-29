@@ -459,7 +459,7 @@
   function parseExtra(text) {
     var s = String(text == null ? '' : text).trim();
     if (s === '') return { ok: true, value: '' };
-    var bad = { ok: false, message: '关思考参数不是合法的 JSON，要一个对象，例如 {"reasoning_effort":"off"}' };
+    var bad = { ok: false, message: '关思考参数要填一个 JSON 对象，例如 {"reasoning_effort":"off"}' };
     var v;
     try { v = JSON.parse(s); } catch (e) { return { ok: false, message: '关思考参数不是合法的 JSON：' + e.message }; }
     if (typeof v === 'string') { // 整个被当成字符串包了一层，解开再解析一次

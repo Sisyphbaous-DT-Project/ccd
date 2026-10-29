@@ -214,14 +214,15 @@ func TestAdminConfigSavesPanelPayload(t *testing.T) {
 // 关思考参数也要收成对象；填坏的退回默认，别把一段坏文本留在盘上。
 func TestConfigStoreNormalizesDisabledExtra(t *testing.T) {
 	cases := []struct {
-		name  string
-		extra string
-		want  map[string]any // 落盘后应为的对象；nil 表示不该存在
+		name   string
+		extra  string
+		object bool           // true：extra 原样当对象传（直接调接口）；false：包成字符串（面板发来的）
+		want   map[string]any // 落盘后应为的对象；nil 表示不该存在
 	}{
-		{"面板发来的字符串", `{"reasoning_effort":"off"}`, map[string]any{"reasoning_effort": "off"}},
-		{"直接给的对象", `{"reasoning_effort":"high"}`, map[string]any{"reasoning_effort": "high"}},
-		{"填坏了退回默认", `{"a":}`, nil},
-		{"留空", "", nil},
+		{"面板发来的字符串", `{"reasoning_effort":"off"}`, false, map[string]any{"reasoning_effort": "off"}},
+		{"直接给的对象", `{"reasoning_effort":"high"}`, true, map[string]any{"reasoning_effort": "high"}},
+		{"填坏了退回默认", `{"a":}`, false, nil},
+		{"留空", "", false, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -230,10 +231,14 @@ func TestConfigStoreNormalizesDisabledExtra(t *testing.T) {
 			if err != nil {
 				t.Fatalf("newConfigStore: %v", err)
 			}
+			extraRaw := json.RawMessage(mustJSON(t, c.extra))
+			if c.object {
+				extraRaw = json.RawMessage(c.extra)
+			}
 			// 停用 + 没选转述 key：校验会在读到高级设置之前就返回，正是「半成品」那种情况
 			cfg := &config{Rules: []rule{{
 				ID: "r1", Enabled: false, Group: "normal", Lang: langZH,
-				Advanced: &advanced{Extra: json.RawMessage(mustJSON(t, c.extra))},
+				Advanced: &advanced{Extra: extraRaw},
 			}}}
 			if err := s.save(cfg); err != nil {
 				t.Fatalf("save: %v", err)
@@ -360,11 +365,14 @@ func TestPanelNeverScrapesAdvancedFromDOM(t *testing.T) {
 		t.Fatal("找不到 collectEditor 的结尾")
 	}
 	body := js[start : start+end]
-	// 高级设置那几个框的 id 一个都不能出现（其它字段一直渲染着，按 id 读没问题）
+	// 高级设置那几个框的 id 一个都不能出现（其它字段一直渲染着，按 id 读没问题）。
+	// 面板里的字符串大多用单引号，三种引号都要查：只查一种的话，改回旧写法也发现不了。
 	for _, id := range []string{"ccd-sf", "ccd-ss", "ccd-sm", "ccd-nf", "ccd-ns", "ccd-nm",
 		"ccd-p1", "ccd-p2", "ccd-to", "ccd-cw", "ccd-ex"} {
-		if strings.Contains(body, `"`+id+`"`) {
-			t.Fatalf("collectEditor 又开始从 DOM 读 %s 了，收起的高级设置会被读成 0：\n%s", id, body)
+		for _, q := range []string{`"`, `'`, "`"} {
+			if strings.Contains(body, q+id+q) {
+				t.Fatalf("collectEditor 又开始从 DOM 读 %s 了，收起的高级设置会被读成 0：\n%s", id, body)
+			}
 		}
 	}
 	// 输入框必须带 data-adv，值随输入写回规则
