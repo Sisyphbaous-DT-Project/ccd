@@ -182,36 +182,39 @@
     var models = groupModels(r.group);
     var checked = {};
     (r.models || []).forEach(function (m) { checked[m] = true; });
-    var adv = r.advanced || {};
+    var adv = advValues(r);
     var isTok = r.scope === 'token';
     var ttk = tokenByID(r.translator_token_id);
     var tgroup = ttk ? ttk.group : (r.translator_group || '');
+    // 每个输入框用 data-adv 标明它写回 advanced 的哪个字段；值随输入实时写回 editing，
+    // 不再等到保存时从 DOM 刮一遍（以前只要有一次 render 跑在输入框被移除之后，刮出来就全是 0）。
     var advBlock = advancedOpen ? (
-      '<div class="ccd-card" style="margin-top:8px">' +
+      '<div class="ccd-card" id="ccd-adv-box" style="margin-top:8px">' +
       '<div class="ccd-row"><span class="ccd-label">流式切段</span>' +
-      '<input id="ccd-sf" type="number" style="width:76px" value="' + esc(adv.stream_first) + '">' +
-      '<input id="ccd-ss" type="number" style="width:76px" value="' + esc(adv.stream_step) + '">' +
-      '<input id="ccd-sm" type="number" style="width:86px" value="' + esc(adv.stream_max) + '">' +
+      '<input id="ccd-sf" data-adv="stream_first" type="number" style="width:76px" value="' + esc(adv.stream_first) + '">' +
+      '<input id="ccd-ss" data-adv="stream_step" type="number" style="width:76px" value="' + esc(adv.stream_step) + '">' +
+      '<input id="ccd-sm" data-adv="stream_max" type="number" style="width:86px" value="' + esc(adv.stream_max) + '">' +
       '<span class="ccd-hint">首段 / 步长 / 上限（字）</span></div>' +
       '<div class="ccd-row"><span class="ccd-label">同步切段</span>' +
-      '<input id="ccd-nf" type="number" style="width:76px" value="' + esc(adv.sync_first) + '">' +
-      '<input id="ccd-ns" type="number" style="width:76px" value="' + esc(adv.sync_step) + '">' +
-      '<input id="ccd-nm" type="number" style="width:86px" value="' + esc(adv.sync_max) + '">' +
+      '<input id="ccd-nf" data-adv="sync_first" type="number" style="width:76px" value="' + esc(adv.sync_first) + '">' +
+      '<input id="ccd-ns" data-adv="sync_step" type="number" style="width:76px" value="' + esc(adv.sync_step) + '">' +
+      '<input id="ccd-nm" data-adv="sync_max" type="number" style="width:86px" value="' + esc(adv.sync_max) + '">' +
       '<span class="ccd-hint">首段 / 步长 / 上限（字）</span></div>' +
       '<div class="ccd-row"><span class="ccd-label">并发</span>' +
-      '<input id="ccd-p1" type="number" style="width:70px" value="' + esc(adv.parallel) + '">' +
+      '<input id="ccd-p1" data-adv="parallel" type="number" style="width:70px" value="' + esc(adv.parallel) + '">' +
       '<span class="ccd-hint">流式</span>' +
-      '<input id="ccd-p2" type="number" style="width:70px" value="' + esc(adv.sync_parallel) + '">' +
+      '<input id="ccd-p2" data-adv="sync_parallel" type="number" style="width:70px" value="' + esc(adv.sync_parallel) + '">' +
       '<span class="ccd-hint">同步</span></div>' +
       '<div class="ccd-row"><span class="ccd-label">单段超时</span>' +
-      '<input id="ccd-to" type="number" style="width:70px" value="' + esc(adv.timeout_sec) + '">' +
+      '<input id="ccd-to" data-adv="timeout_sec" type="number" style="width:70px" value="' + esc(adv.timeout_sec) + '">' +
       '<span class="ccd-hint">秒</span></div>' +
       '<div class="ccd-row"><span class="ccd-label">正文最多等</span>' +
-      '<input id="ccd-cw" type="number" style="width:70px" value="' + esc(adv.content_wait_sec) + '">' +
+      '<input id="ccd-cw" data-adv="content_wait_sec" type="number" style="width:70px" value="' + esc(adv.content_wait_sec) + '">' +
       '<span class="ccd-hint">秒，0 = 一直等（每段本来就有超时兜底）</span></div>' +
       '<div class="ccd-row" style="align-items:flex-start"><span class="ccd-label">关思考参数</span>' +
-      '<textarea id="ccd-ex" style="width:100%;height:56px">' + esc(adv.extra || '') + '</textarea></div>' +
+      '<textarea id="ccd-ex" data-adv="extra" style="width:100%;height:56px" placeholder="' + esc('{"reasoning_effort":"off"}') + '">' + esc(adv.extra || '') + '</textarea></div>' +
       '<div class="ccd-hint">留空用默认 {"reasoning_effort":"off","thinking":{"type":"disabled"}}；只用在转述调用上，不会碰用户的请求。</div>' +
+      '<div class="ccd-warn" id="ccd-ex-err"' + (r.advancedError ? '' : ' style="display:none"') + '>' + esc(r.advancedError || '') + '</div>' +
       '</div>') : '';
 
     var targetRows = isTok ? (
@@ -369,7 +372,29 @@
     var ci = document.getElementById('ccd-lang-custom-input');
     if (ci) ci.oninput = function () { r.lang_custom = ci.value; };
     var adv = document.getElementById('ccd-adv-toggle');
-    if (adv) adv.onclick = function () { advancedOpen = !advancedOpen; collectEditor(); render(); };
+    if (adv) adv.onclick = function () {
+      // 值已经随输入写回 editing 了，这里只切换展开状态，不用再刮一遍 DOM
+      if (advancedOpen && editing.advancedError) return; // 填错了就别收起，提示留在眼前
+      advancedOpen = !advancedOpen;
+      render();
+    };
+    // 高级设置的每个输入框随输入立刻写回 editing.advanced —— 保存时直接用它，
+    // 不再依赖「保存那一刻输入框还在 DOM 里」这件事。
+    function writeAdv(el) {
+      var k = el.getAttribute('data-adv');
+      var res = applyAdvanced(r, k, el.value);
+      if (k !== 'extra') return;
+      r.advancedError = res.ok ? '' : res.message;
+      var err = document.getElementById('ccd-ex-err');
+      if (err) {
+        err.textContent = r.advancedError;
+        err.style.display = r.advancedError ? '' : 'none';
+      }
+    }
+    document.querySelectorAll('#ccd-adv-box [data-adv]').forEach(function (el) {
+      el.oninput = function () { writeAdv(el); };
+      el.onchange = function () { writeAdv(el); };
+    });
     var t = document.getElementById('ccd-test');
     if (t) t.onclick = function () { runTest(t); };
     var s = document.getElementById('ccd-save');
@@ -385,6 +410,63 @@
         r.models = arr;
       }
     };
+  }
+
+  // advValues 把规则上的高级参数补成可显示的值：没存过的（0 / 缺失）就用服务端给的默认值，
+  // 免得刚点开「高级设置」就是一片 0。
+  function advValues(r) {
+    var d = config.default_advanced || {};
+    var a = (r && r.advanced) || {};
+    var pick = function (k) {
+      var v = parseInt(a[k], 10);
+      if (v > 0) return v;
+      v = parseInt(d[k], 10);
+      return v > 0 ? v : 0;
+    };
+    var cw = a.content_wait_sec == null ? (parseInt(d.content_wait_sec, 10) || 0) : (parseInt(a.content_wait_sec, 10) || 0);
+    var ex = a.extra;
+    if (ex && typeof ex === 'object') ex = JSON.stringify(ex); // 接口回的是对象，输入框只认文本
+    if (ex == null) ex = '';
+    return {
+      stream_first: pick('stream_first'), stream_step: pick('stream_step'), stream_max: pick('stream_max'),
+      sync_first: pick('sync_first'), sync_step: pick('sync_step'), sync_max: pick('sync_max'),
+      parallel: pick('parallel'), sync_parallel: pick('sync_parallel'),
+      timeout_sec: pick('timeout_sec'), content_wait_sec: cw, extra: String(ex)
+    };
+  }
+
+  // applyAdvanced 把高级设置里某个输入框的值写到规则上。
+  // 输入框一改就调它，所以保存时规则里已经是最新值 —— 不必再在保存那一刻去 DOM 里刮一遍
+  // （高级设置收起后输入框不在文档里，刮出来的全是 0，这正是「保存后重进设置全变 0」的原因）。
+  // 返回 {ok, message}：只有关思考参数填错时会 ok=false。
+  function applyAdvanced(r, key, raw) {
+    if (!r) return { ok: true };
+    if (!r.advanced) r.advanced = {};
+    if (key === 'extra') {
+      var p = parseExtra(raw);
+      if (!p.ok) return p;
+      r.advanced.extra = p.value;
+      return { ok: true };
+    }
+    var v = parseInt(raw, 10);
+    // 清空或填了非数字就记 0，交给后端 clamp 回默认值；沿用旧值会让界面和实际不符
+    r.advanced[key] = isNaN(v) ? 0 : v;
+    return { ok: true };
+  }
+
+  // parseExtra 校验「关思考参数」：留空表示用默认，填了就必须是 JSON 对象。
+  // 和后端一样收两种写法：对象本身，或者把对象当字符串包一层。
+  function parseExtra(text) {
+    var s = String(text == null ? '' : text).trim();
+    if (s === '') return { ok: true, value: '' };
+    var bad = { ok: false, message: '关思考参数要填一个 JSON 对象，例如 {"reasoning_effort":"off"}' };
+    var v;
+    try { v = JSON.parse(s); } catch (e) { return { ok: false, message: '关思考参数不是合法的 JSON：' + e.message }; }
+    if (typeof v === 'string') { // 整个被当成字符串包了一层，解开再解析一次
+      try { v = JSON.parse(v.trim()); } catch (e) { return bad; }
+    }
+    if (!v || typeof v !== 'object' || Object.prototype.toString.call(v) === '[object Array]') return bad;
+    return { ok: true, value: JSON.stringify(v) };
   }
 
   function collectEditor() {
@@ -416,27 +498,20 @@
     }
     var ci = document.getElementById('ccd-lang-custom-input');
     if (ci) { r.lang_custom = ci.value; if (r.lang === 'custom') { } }
-    var read = function (id) {
-      var el = document.getElementById(id);
-      return el ? parseInt(el.value, 10) || 0 : 0;
-    };
-    var ex = document.getElementById('ccd-ex');
-    r.advanced = {
-      stream_first: read('ccd-sf'), stream_step: read('ccd-ss'), stream_max: read('ccd-sm'),
-      sync_first: read('ccd-nf'), sync_step: read('ccd-ns'), sync_max: read('ccd-nm'),
-      parallel: read('ccd-p1'), sync_parallel: read('ccd-p2'),
-      timeout_sec: read('ccd-to'), content_wait_sec: read('ccd-cw'),
-      extra: ex ? ex.value.trim() : (r.advanced && r.advanced.extra) || ''
-    };
+    // 高级设置不在这里读：每个输入框一改就已经写回 r.advanced 了。
+    // 以前是保存时统一刮 DOM，高级设置一收起（输入框不在 DOM 里）就全读成 0，
+    // 于是「保存之后重进，之前设过的全变 0」。
   }
 
   async function saveRule(btn) {
     var out = document.getElementById('ccd-save-out');
     var auth = await ensureAuth(false);
     if (!auth || auth.role < 100) { out.textContent = '会话失效，请刷新页面'; return; }
+    if (editing && editing.advancedError) { out.textContent = '❌ ' + editing.advancedError; return; }
     var r = JSON.parse(JSON.stringify(editing));
+    delete r.advancedError;
     r.enabled = true; // 在编辑器里保存 = 要用这条规则（没选转述 key 而被停用的规则，补好后保存即启用）
-    if (r.advanced && r.advanced.extra === '') delete r.advanced.extra;
+    if (r.advanced && (r.advanced.extra === '' || r.advanced.extra == null)) delete r.advanced.extra;
     var rules = (config.rules || []).slice();
     var idx = -1;
     for (var i = 0; i < rules.length; i++) if (rules[i].id && rules[i].id === r.id) idx = i;
@@ -455,8 +530,10 @@
     var out = document.getElementById('ccd-test-out');
     var auth = await ensureAuth(false);
     if (!auth || auth.role < 100) { out.textContent = '会话失效，请刷新页面'; return; }
+    if (editing && editing.advancedError) { out.textContent = '❌ ' + editing.advancedError; return; }
     var r = JSON.parse(JSON.stringify(editing));
-    if (r.advanced && r.advanced.extra === '') delete r.advanced.extra;
+    delete r.advancedError;
+    if (r.advanced && (r.advanced.extra === '' || r.advanced.extra == null)) delete r.advanced.extra;
     btn.disabled = true; out.textContent = '测试中…';
     var resp = await api(auth, '/ccd/admin/test', 'POST', {
       lang: r.lang, lang_custom: r.lang_custom,
@@ -475,7 +552,8 @@
     var auth = await ensureAuth(false);
     if (!auth || auth.role < 100) { alert('会话失效，请刷新页面'); return; }
     var clean = JSON.parse(JSON.stringify(rules)).map(function (r) {
-      if (r.advanced && r.advanced.extra === '') delete r.advanced.extra;
+      delete r.advancedError;
+      if (r.advanced && (r.advanced.extra === '' || r.advanced.extra == null)) delete r.advanced.extra;
       return r;
     });
     var resp = await api(auth, '/ccd/admin/config', 'PUT', { rules: clean });
