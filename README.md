@@ -29,7 +29,7 @@ ccd 把同样的做法带到了 new-api 上。它是一个放在 new-api 前面�
 - **只改用户看到的思维链**：正文、工具调用、usage（含 reasoning tokens）、id、model、finish_reason、签名、事件顺序一律不动。
 - **原版换回**：原始思维链按用户隔离持久化到磁盘，服务重启不丢；客户端每轮改系统提示词（比如带上当前时间）也能换回；转述失败时也能换回。
 - **没命中规则的请求逐字节透传**，连请求体都不解析。
-- **格式**：`/v1/chat/completions` 与 Anthropic `/v1/messages`，流式和同步都支持，包括多个 thinking 块穿插工具调用、`redacted_thinking`。
+- **格式**：`/v1/chat/completions`、Anthropic `/v1/messages` 与 OpenAI `/v1/responses`，流式和同步都支持，包括多个 thinking 块穿插工具调用、`redacted_thinking`。
 - **后台面板**：注入 new-api 日志页，管理员可以增删改规则、选转述语言和转述模型、一键测试转述。
 - **转述用你自己的 key**：转述模型从你已有的 key 里选，用量记在这个 key 上，不会偷偷建令牌。
 - **数据库**：只读 new-api 的数据库认 key，支持 SQLite / MySQL / PostgreSQL。
@@ -115,7 +115,7 @@ CCD_SQLITE_PATH=/path/to/new-api/data/one-api.db \
 
 ## 已知限制
 
-- `/v1/responses`、Gemini 原生接口、embeddings / rerank 目前原样透传，不转述。
+- Gemini 原生接口、embeddings / rerank 目前原样透传，不转述。
 - 转述由另一次模型调用完成，用户看到第一句笔记会比上游开始思考晚一点（摘要的固有成本）；面板里可以设置「正文最多等摘要多久」。
 - 客户端如果不把思维链带回来，就没有可换回的内容（这和不用 ccd 时一样）。
 - 绕过反向代理直连 new-api 的请求不经过 ccd，不会被转述。

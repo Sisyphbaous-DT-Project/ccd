@@ -29,6 +29,7 @@ const (
 
 	kindChat      = "chat"
 	kindAnthropic = "messages"
+	kindResponses = "responses"
 
 	maxReqBody  = 64 << 20
 	maxRespBody = 64 << 20
@@ -213,9 +214,9 @@ func (a *app) newProxy() *httputil.ReverseProxy {
 // forwardedHeaders 是 ReverseProxy 的 Rewrite 模式会自动删掉的几个转发头。
 var forwardedHeaders = []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto"}
 
-// relayPath 只有这两个端点参与转述，其余（/v1/responses、Gemini 原生、embeddings、rerank…）一律原样透传。
+// relayPath 只有这三个端点参与转述，其余（Gemini 原生、embeddings、rerank…）一律原样透传。
 func relayPath(p string) bool {
-	return p == "/v1/chat/completions" || p == "/v1/messages"
+	return p == "/v1/chat/completions" || p == "/v1/messages" || p == "/v1/responses"
 }
 
 func (a *app) handler() http.Handler {
@@ -278,17 +279,23 @@ func (a *app) relay(w http.ResponseWriter, r *http.Request) {
 	}
 
 	kind := kindChat
-	if r.URL.Path == "/v1/messages" {
+	switch r.URL.Path {
+	case "/v1/messages":
 		kind = kindAnthropic
+	case "/v1/responses":
+		kind = kindResponses
 	}
 	var out []byte
 	var model string
 	var prefix chatPrefix
 	restored := 0
-	if kind == kindChat {
+	switch kind {
+	case kindChat:
 		out, model, prefix, restored = prepareChat(raw, id.UserID, a.store)
-	} else {
+	case kindAnthropic:
 		out, model, restored = prepareAnthropic(raw, id.UserID, a.store)
+	default:
+		out, model, prefix, restored = prepareResponses(raw, id.UserID, a.store)
 	}
 
 	var hit *rule
@@ -347,7 +354,8 @@ func (a *app) modifyResponse(resp *http.Response) error {
 		return nil
 	}
 	stream := strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream")
-	if st.kind == kindAnthropic {
+	switch st.kind {
+	case kindAnthropic:
 		if stream {
 			resp.Body = a.anthropicStream(resp, st)
 			resp.Header.Del("Content-Length")
@@ -355,6 +363,14 @@ func (a *app) modifyResponse(resp *http.Response) error {
 			return nil
 		}
 		return a.anthropicNonStream(resp, st)
+	case kindResponses:
+		if stream {
+			resp.Body = a.responsesStream(resp, st)
+			resp.Header.Del("Content-Length")
+			resp.ContentLength = -1
+			return nil
+		}
+		return a.responsesNonStream(resp, st)
 	}
 	if stream {
 		resp.Body = a.chatStream(resp, st)

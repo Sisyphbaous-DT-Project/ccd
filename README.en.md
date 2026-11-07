@@ -29,7 +29,7 @@ ccd brings the same approach to new-api. It is a small service that sits in fron
 - **Only the visible reasoning changes.** Content, tool calls, usage (including reasoning tokens), id, model, finish_reason, signatures and event order are left untouched.
 - **Originals come back.** Raw reasoning is persisted per user on disk (survives restarts) and restored even when the client rewrites its system prompt every turn, or when a summary failed.
 - **Requests that match no rule pass through byte for byte**, without even parsing the body.
-- **Formats:** `/v1/chat/completions` and Anthropic `/v1/messages`, streaming and non-streaming, including interleaved thinking blocks around tool calls and `redacted_thinking`.
+- **Formats:** `/v1/chat/completions`, Anthropic `/v1/messages` and OpenAI `/v1/responses`, streaming and non-streaming, including interleaved thinking blocks around tool calls and `redacted_thinking`.
 - **Admin panel** injected into new-api's log page: manage rules, pick the note language and the summarizer model, test a summary in one click.
 - **Your own key for the summarizer.** You pick one of your existing keys; usage is billed to it. ccd never creates tokens behind your back.
 - **Databases:** reads new-api's database (read-only) to identify keys; SQLite, MySQL and PostgreSQL are supported.
@@ -115,7 +115,7 @@ Advanced settings per rule (collapsed in the panel): segment sizes for streaming
 
 ## Limitations
 
-- `/v1/responses`, Gemini-native endpoints and embeddings / rerank are passed through without summaries.
+- Gemini-native endpoints and embeddings / rerank are passed through without summaries.
 - Notes are written by a second model call, so the first note appears a little after the upstream starts thinking; the panel lets you cap how long content waits for notes.
 - If a client does not send reasoning back, there is nothing to restore (same as without ccd).
 - Requests that bypass the reverse proxy and hit new-api directly are not summarized.

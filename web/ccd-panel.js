@@ -602,8 +602,8 @@
       '<b style="font-size:16px">思维链转述</b>' +
       '<button id="ccd-close" style="margin-left:auto;' + STYLE + 'margin-left:auto">关闭</button></div>' +
       '<div class="ccd-hint" style="margin-bottom:10px">客户端看到的思维链文字会被换成转述；正文、工具调用、用量、签名等一律不动。' +
-      '支持 <b>/v1/chat/completions</b> 与 <b>/v1/messages</b>（流式/同步）；' +
-      '<b>/v1/responses</b>、Gemini 原生、embeddings / rerank 本期原样透传、不转述。</div>' +
+      '支持 <b>/v1/chat/completions</b>、<b>/v1/messages</b> 与 <b>/v1/responses</b>（流式/同步）；' +
+      'Gemini 原生、embeddings / rerank 本期原样透传、不转述。</div>' +
       '<div id="ccd-body"></div></div>';
     document.body.appendChild(mask);
     document.getElementById('ccd-close').onclick = function () { editing = null; mask.remove(); };
